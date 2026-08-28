@@ -35,23 +35,31 @@
         statusDiv.className = "loading";
         statusDiv.innerText = `Registrando a: ${studentData.nombre}...`;
 
-        // Envío asíncrono a Google Sheets
-        fetch(WEB_APP_URL, {
-          method: "POST",
-          mode: "no-cors", // Requerido para llamadas simples a Apps Script
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(studentData)
-        }).then(() => {
-          statusDiv.className = "success";
-          statusDiv.innerText = `✓ Asistencia registrada: ${studentData.nombre}`;
-          
-          // Espera 3 segundos antes de permitir el siguiente escaneo
-          setTimeout(() => {
-            bloqueado = false;
-            statusDiv.className = "";
-            statusDiv.innerText = "Esperando siguiente tarjeta QR...";
-          }, 3000);
-        });
+        // Envío compatible con Google Apps Script
+    const formData = new URLSearchParams();
+    formData.append("id", studentData.id);
+    formData.append("nombre", studentData.nombre);
+
+    fetch(WEB_APP_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: formData.toString()
+    }).then(() => {
+      statusDiv.className = "success";
+      statusDiv.innerText = `✓ Asistencia registrada: ${studentData.nombre}`;
+      
+      setTimeout(() => {
+        bloqueado = false;
+        statusDiv.className = "";
+        statusDiv.innerText = "Esperando tarjeta QR...";
+      }, 3000);
+    }).catch(err => {
+      bloqueado = false;
+      statusDiv.innerText = "Error de red al registrar";
+    });
 
       } catch (err) {
         console.warn("QR no válido para este sistema:", decodedText);
