@@ -6,57 +6,80 @@
   <title>Control de Asistencia QR</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
-    body { font-family: sans-serif; text-align: center; background: #f4f4f9; padding: 15px; margin: 0; }
-    h2 { margin: 10px 0; font-size: 1.4rem; color: #333; }
-    #reader { width: 100%; max-width: 400px; margin: 0 auto; border-radius: 12px; overflow: hidden; }
-    #status { margin-top: 15px; font-weight: bold; padding: 12px; border-radius: 8px; font-size: 0.95rem; background: #e2e8f0; color: #334155; }
-    .success { background-color: #d4edda !important; color: #155724 !important; }
-    .loading { background-color: #fff3cd !important; color: #856404 !important; }
-    .error { background-color: #f8d7da !important; color: #721c24 !important; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; background: #0f172a; color: #fff; padding: 15px; margin: 0; }
+    h2 { margin: 8px 0; font-size: 1.3rem; color: #38bdf8; }
+    #reader { width: 100%; max-width: 380px; margin: 0 auto; border-radius: 12px; overflow: hidden; border: 2px solid #334155; }
+    #status { margin-top: 12px; font-weight: 600; padding: 12px; border-radius: 8px; font-size: 1rem; background: #1e293b; color: #94a3b8; min-height: 48px; display: flex; align-items: center; justify-content: center; }
+    .success { background-color: #15803d !important; color: #ffffff !important; }
+    .repeat { background-color: #b45309 !important; color: #ffffff !important; }
   </style>
 </head>
 <body>
 
-  <h2>Escáner de Asistencia</h2>
+  <h2>Asistencia QR</h2>
   <div id="reader"></div>
-  <div id="status">Iniciando cámara...</div>
+  <div id="status">Apunte la cámara al código QR</div>
 
   <script>
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwciY3qNBOcrWhUXPH6itlxXFmHZvIAFNM4qfdwLTrN1_yuRXavemIJ6NW2dquuPiq0Pw/exec"; 
-    let bloqueado = false;
+    
+    let ultimoQR = "";
+    let tiempoUltimoQR = 0;
+    const audioBeep = new Audio("data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU"+Array(200).join("1234"));
+
+    function reproducirSonido() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 880; // Tono agudo
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.1);
+      } catch(e) {}
+    }
 
     function onScanSuccess(decodedText) {
-      if (bloqueado) return;
-      bloqueado = true;
+      const ahora = Date.now();
 
-      const statusDiv = document.getElementById("status");
-      statusDiv.className = "loading";
-      statusDiv.innerText = "Procesando...";
+      // Evita registrar al MISMO estudiante dos veces en menos de 6 segundos
+      if (decodedText === ultimoQR && (ahora - tiempoUltimoQR) < 6000) {
+        return; 
+      }
+
+      ultimoQR = decodedText;
+      tiempoUltimoQR = ahora;
 
       let id = "", nombre = "", grado = "", condicion = "";
 
-      // Si viene con formato JSON
-      if (decodedText.startsWith("{")) {
+      // Extracción rápida por separador |
+      if (decodedText.includes("|")) {
+        const partes = decodedText.split("|");
+        id = partes[0] ? partes[0].trim() : "";
+        nombre = partes[1] ? partes[1].trim() : "";
+        grado = partes[2] ? partes[2].trim() : "";
+        condicion = partes[3] ? partes[3].trim() : "";
+      } else if (decodedText.startsWith("{")) {
         try {
           const data = JSON.parse(decodedText);
           id = data.id || "";
           nombre = data.nombre || "";
           grado = data.grado || "";
           condicion = data.condicion || "";
-        } catch (e) {}
-      } 
-      
-      // Si viene separado por barras |
-      if (!nombre && decodedText.includes("|")) {
-        const partes = decodedText.split("|");
-        id = partes[0] ? partes[0].trim() : "";
-        nombre = partes[1] ? partes[1].trim() : "";
-        grado = partes[2] ? partes[2].trim() : "";
-        condicion = partes[3] ? partes[3].trim() : "";
+        } catch(e) {}
       }
 
-      statusDiv.innerText = `Registrando: ${nombre}...`;
+      if (!nombre) return;
 
+      // 1. Respuesta visual y sonora instantánea (0 ms)
+      reproducirSonido();
+      const statusDiv = document.getElementById("status");
+      statusDiv.className = "success";
+      statusDiv.innerHTML = `✓ ${nombre}<br><small style="font-weight:normal">${grado} · ${condicion}</small>`;
+
+      // 2. Envío en segundo plano (Fire and Forget)
       const formData = new URLSearchParams();
       formData.append("id", id);
       formData.append("nombre", nombre);
@@ -68,51 +91,27 @@
         mode: "no-cors",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: formData.toString()
-      }).then(() => {
-        statusDiv.className = "success";
-        statusDiv.innerText = `✓ Registrado: ${nombre} (${condicion})`;
-        setTimeout(() => {
-          bloqueado = false;
-          statusDiv.className = "";
-          statusDiv.innerText = "Esperando tarjeta QR...";
-        }, 2500);
-      }).catch(err => {
-        statusDiv.className = "error";
-        statusDiv.innerText = "Error al enviar";
-        setTimeout(() => {
-          bloqueado = false;
-          statusDiv.className = "";
-          statusDiv.innerText = "Esperando tarjeta QR...";
-        }, 2000);
       });
+
+      // Vuelve a estado de espera a los 1.5 segundos
+      setTimeout(() => {
+        statusDiv.className = "";
+        statusDiv.innerText = "Listo para el siguiente...";
+      }, 1500);
     }
 
-    // Configuración estable para Chrome Móvil
+    // Configuración optimizada de cámara (alta velocidad a 20 FPS)
     const html5QrCode = new Html5Qrcode("reader");
-    Html5Qrcode.getCameras().then(cameras => {
-      if (cameras && cameras.length) {
-        // Selecciona la cámara trasera preferentemente
-        const backCamera = cameras.find(cam => cam.label.toLowerCase().includes('back') || cam.label.toLowerCase().includes('trasera')) || cameras[cameras.length - 1];
-        
-        html5QrCode.start(
-          backCamera.id,
-          {
-            fps: 10,
-            qrbox: function(viewfinderWidth, viewfinderHeight) {
-              const minEdgePercentage = 0.7;
-              const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
-              const qrboxSize = Math.floor(minEdgeSize * minEdgePercentage);
-              return { width: qrboxSize, height: qrboxSize };
-            }
-          },
-          onScanSuccess
-        ).then(() => {
-          document.getElementById("status").innerText = "Esperando tarjeta QR...";
-        });
-      }
-    }).catch(err => {
-      document.getElementById("status").className = "error";
-      document.getElementById("status").innerText = "Error al acceder a la cámara: " + err;
+    html5QrCode.start(
+      { facingMode: "environment" },
+      { 
+        fps: 20, 
+        qrbox: 240,
+        aspectRatio: 1.0
+      },
+      onScanSuccess
+    ).catch(err => {
+      document.getElementById("status").innerText = "Error: Permita el acceso a la cámara";
     });
   </script>
 </body>
