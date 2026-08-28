@@ -35,10 +35,12 @@
         statusDiv.className = "loading";
         statusDiv.innerText = `Registrando a: ${studentData.nombre}...`;
 
-        // Envío compatible con Google Apps Script
+   // Envío compatible
     const formData = new URLSearchParams();
     formData.append("id", studentData.id);
     formData.append("nombre", studentData.nombre);
+    formData.append("grado", studentData.grado || "");
+    formData.append("condicion", studentData.condicion || "");
 
     fetch(WEB_APP_URL, {
       method: "POST",
@@ -49,7 +51,7 @@
       body: formData.toString()
     }).then(() => {
       statusDiv.className = "success";
-      statusDiv.innerText = `✓ Asistencia registrada: ${studentData.nombre}`;
+      statusDiv.innerText = `✓ Asistencia: ${studentData.nombre} (${studentData.condicion})`;
       
       setTimeout(() => {
         bloqueado = false;
