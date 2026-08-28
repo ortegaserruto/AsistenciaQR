@@ -8,7 +8,7 @@
   <style>
     body { font-family: sans-serif; text-align: center; background: #f4f4f9; padding: 15px; margin: 0; }
     h2 { margin: 10px 0; font-size: 1.4rem; color: #333; }
-    #reader { width: 100%; max-width: 420px; margin: 0 auto; border-radius: 12px; overflow: hidden; background: #000; }
+    #reader { width: 100%; max-width: 400px; margin: 0 auto; border-radius: 12px; overflow: hidden; }
     #status { margin-top: 15px; font-weight: bold; padding: 12px; border-radius: 8px; font-size: 0.95rem; background: #e2e8f0; color: #334155; }
     .success { background-color: #d4edda !important; color: #155724 !important; }
     .loading { background-color: #fff3cd !important; color: #856404 !important; }
@@ -19,7 +19,7 @@
 
   <h2>Escáner de Asistencia</h2>
   <div id="reader"></div>
-  <div id="status">Esperando tarjeta QR...</div>
+  <div id="status">Iniciando cámara...</div>
 
   <script>
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwciY3qNBOcrWhUXPH6itlxXFmHZvIAFNM4qfdwLTrN1_yuRXavemIJ6NW2dquuPiq0Pw/exec"; 
@@ -31,32 +31,28 @@
 
       const statusDiv = document.getElementById("status");
       statusDiv.className = "loading";
-      statusDiv.innerText = "Procesando tarjeta...";
+      statusDiv.innerText = "Procesando...";
 
-      let id = "";
-      let nombre = "";
-      let grado = "";
-      let condicion = "";
+      let id = "", nombre = "", grado = "", condicion = "";
 
-      // Intento 1: Parsear como JSON
-      try {
-        const studentData = JSON.parse(decodedText);
-        id = studentData.id || "";
-        nombre = studentData.nombre || "";
-        grado = studentData.grado || "";
-        condicion = studentData.condicion || "";
-      } catch (e) {
-        // Intento 2: Si el QR es texto separado por comas o barras (ej: EST-001|Juan|3ro A|Zampoñista)
-        const partes = decodedText.split(/[,|]/);
-        if (partes.length >= 2) {
-          id = partes[0].trim();
-          nombre = partes[1].trim();
-          grado = partes[2] ? partes[2].trim() : "";
-          condicion = partes[3] ? partes[3].trim() : "";
-        } else {
-          // Si no tiene formato, envía todo el texto como nombre
-          nombre = decodedText;
-        }
+      // Si viene con formato JSON
+      if (decodedText.startsWith("{")) {
+        try {
+          const data = JSON.parse(decodedText);
+          id = data.id || "";
+          nombre = data.nombre || "";
+          grado = data.grado || "";
+          condicion = data.condicion || "";
+        } catch (e) {}
+      } 
+      
+      // Si viene separado por barras |
+      if (!nombre && decodedText.includes("|")) {
+        const partes = decodedText.split("|");
+        id = partes[0] ? partes[0].trim() : "";
+        nombre = partes[1] ? partes[1].trim() : "";
+        grado = partes[2] ? partes[2].trim() : "";
+        condicion = partes[3] ? partes[3].trim() : "";
       }
 
       statusDiv.innerText = `Registrando: ${nombre}...`;
@@ -74,32 +70,49 @@
         body: formData.toString()
       }).then(() => {
         statusDiv.className = "success";
-        statusDiv.innerText = `✓ Registrado: ${nombre}\n${grado} - ${condicion}`;
-        
-        setTimeout(() => {
-          bloqueado = false;
-          statusDiv.className = "";
-          statusDiv.innerText = "Esperando tarjeta QR...";
-        }, 3000);
-      }).catch(err => {
-        statusDiv.className = "error";
-        statusDiv.innerText = "Error de conexión al registrar";
+        statusDiv.innerText = `✓ Registrado: ${nombre} (${condicion})`;
         setTimeout(() => {
           bloqueado = false;
           statusDiv.className = "";
           statusDiv.innerText = "Esperando tarjeta QR...";
         }, 2500);
+      }).catch(err => {
+        statusDiv.className = "error";
+        statusDiv.innerText = "Error al enviar";
+        setTimeout(() => {
+          bloqueado = false;
+          statusDiv.className = "";
+          statusDiv.innerText = "Esperando tarjeta QR...";
+        }, 2000);
       });
     }
 
+    // Configuración estable para Chrome Móvil
     const html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      onScanSuccess
-    ).catch(err => {
+    Html5Qrcode.getCameras().then(cameras => {
+      if (cameras && cameras.length) {
+        // Selecciona la cámara trasera preferentemente
+        const backCamera = cameras.find(cam => cam.label.toLowerCase().includes('back') || cam.label.toLowerCase().includes('trasera')) || cameras[cameras.length - 1];
+        
+        html5QrCode.start(
+          backCamera.id,
+          {
+            fps: 10,
+            qrbox: function(viewfinderWidth, viewfinderHeight) {
+              const minEdgePercentage = 0.7;
+              const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
+              const qrboxSize = Math.floor(minEdgeSize * minEdgePercentage);
+              return { width: qrboxSize, height: qrboxSize };
+            }
+          },
+          onScanSuccess
+        ).then(() => {
+          document.getElementById("status").innerText = "Esperando tarjeta QR...";
+        });
+      }
+    }).catch(err => {
       document.getElementById("status").className = "error";
-      document.getElementById("status").innerText = "Error de cámara: " + err;
+      document.getElementById("status").innerText = "Error al acceder a la cámara: " + err;
     });
   </script>
 </body>
