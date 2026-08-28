@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control de Asistencia QR</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #f4f4f9; padding: 20px; }
+    #reader { width: 100%; max-width: 450px; margin: 0 auto; border-radius: 12px; overflow: hidden; }
+    #status { margin-top: 15px; font-weight: bold; padding: 10px; border-radius: 8px; }
+    .success { background-color: #d4edda; color: #155724; }
+    .loading { background-color: #fff3cd; color: #856404; }
+  </style>
+</head>
+<body>
+
+  <h2>Escáner de Asistencia</h2>
+  <div id="reader"></div>
+  <div id="status">Esperando tarjeta QR...</div>
+
+  <script>
+    // REEMPLAZA CON TU URL DE APPS SCRIPT
+    const WEB_APP_URL = "https://script.google.com/macros/s/TU_SCRIPT_ID/exec"; 
+    let bloqueado = false;
+
+    function onScanSuccess(decodedText) {
+      if (bloqueado) return; // Evita lecturas dobles en milisegundos
+
+      try {
+        const studentData = JSON.parse(decodedText);
+        bloqueado = true;
+        
+        const statusDiv = document.getElementById("status");
+        statusDiv.className = "loading";
+        statusDiv.innerText = `Registrando a: ${studentData.nombre}...`;
+
+        // Envío asíncrono a Google Sheets
+        fetch(WEB_APP_URL, {
+          method: "POST",
+          mode: "no-cors", // Requerido para llamadas simples a Apps Script
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(studentData)
+        }).then(() => {
+          statusDiv.className = "success";
+          statusDiv.innerText = `✓ Asistencia registrada: ${studentData.nombre}`;
+          
+          // Espera 3 segundos antes de permitir el siguiente escaneo
+          setTimeout(() => {
+            bloqueado = false;
+            statusDiv.className = "";
+            statusDiv.innerText = "Esperando siguiente tarjeta QR...";
+          }, 3000);
+        });
+
+      } catch (err) {
+        console.warn("QR no válido para este sistema:", decodedText);
+      }
+    }
+
+    // Iniciar cámara trasera por defecto
+    const html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      onScanSuccess
+    ).catch(err => {
+      document.getElementById("status").innerText = "Error al abrir la cámara: " + err;
+    });
+  </script>
+</body>
+</html>
