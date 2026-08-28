@@ -20,12 +20,13 @@
   <div id="status">Esperando tarjeta QR...</div>
 
   <script>
-    // REEMPLAZA CON TU URL DE APPS SCRIPT
+    <script>
+    // Tu URL de Google Apps Script
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwciY3qNBOcrWhUXPH6itlxXFmHZvIAFNM4qfdwLTrN1_yuRXavemIJ6NW2dquuPiq0Pw/exec"; 
     let bloqueado = false;
 
     function onScanSuccess(decodedText) {
-      if (bloqueado) return; // Evita lecturas dobles en milisegundos
+      if (bloqueado) return;
 
       try {
         const studentData = JSON.parse(decodedText);
@@ -33,42 +34,42 @@
         
         const statusDiv = document.getElementById("status");
         statusDiv.className = "loading";
-        statusDiv.innerText = `Registrando a: ${studentData.nombre}...`;
+        statusDiv.innerText = `Registrando: ${studentData.nombre || "Estudiante"}...`;
 
-   // Envío compatible
-    const formData = new URLSearchParams();
-    formData.append("id", studentData.id);
-    formData.append("nombre", studentData.nombre);
-    formData.append("grado", studentData.grado || "");
-    formData.append("condicion", studentData.condicion || "");
+        // Extraer los 4 campos del QR
+        const formData = new URLSearchParams();
+        formData.append("id", studentData.id || "");
+        formData.append("nombre", studentData.nombre || "");
+        formData.append("grado", studentData.grado || "");
+        formData.append("condicion", studentData.condicion || "");
 
-    fetch(WEB_APP_URL, {
-      method: "POST",
-      mode: "no-cors",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: formData.toString()
-    }).then(() => {
-      statusDiv.className = "success";
-      statusDiv.innerText = `✓ Asistencia: ${studentData.nombre} (${studentData.condicion})`;
-      
-      setTimeout(() => {
-        bloqueado = false;
-        statusDiv.className = "";
-        statusDiv.innerText = "Esperando tarjeta QR...";
-      }, 3000);
-    }).catch(err => {
-      bloqueado = false;
-      statusDiv.innerText = "Error de red al registrar";
-    });
+        fetch(WEB_APP_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+          },
+          body: formData.toString()
+        }).then(() => {
+          statusDiv.className = "success";
+          // Muestra en pantalla el nombre, grado y condición leídos
+          statusDiv.innerText = `✓ Registrado: ${studentData.nombre} | ${studentData.grado || "Sin Grado"} | ${studentData.condicion || "Sin Condición"}`;
+          
+          setTimeout(() => {
+            bloqueado = false;
+            statusDiv.className = "";
+            statusDiv.innerText = "Esperando tarjeta QR...";
+          }, 3000);
+        }).catch(err => {
+          bloqueado = false;
+          statusDiv.innerText = "Error de red al registrar";
+        });
 
       } catch (err) {
-        console.warn("QR no válido para este sistema:", decodedText);
+        console.warn("QR no válido o no tiene formato JSON:", decodedText);
       }
     }
 
-    // Iniciar cámara trasera por defecto
     const html5QrCode = new Html5Qrcode("reader");
     html5QrCode.start(
       { facingMode: "environment" },
@@ -77,6 +78,5 @@
     ).catch(err => {
       document.getElementById("status").innerText = "Error al abrir la cámara: " + err;
     });
-  </script>
-</body>
+  </script></body>
 </html>
